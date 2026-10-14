@@ -1,0 +1,7 @@
+apps.json
+.DS_Store
+Thumbs.db
+*.local
+.env
+.env.*
+!.env.example

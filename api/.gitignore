@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.deploy-secrets.env
+.deploy-state.json
+*.local
+function.zip
+# keep example
+!.deploy-secrets.env.example

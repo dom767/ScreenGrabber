@@ -1,0 +1,14 @@
+{
+  "name": "baffledcat-screenshots-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "zip": "node scripts/pack.mjs",
+    "deploy:code": "node scripts/pack.mjs && echo Run DeployScreengrabber.ps1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.758.0",
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/lib-dynamodb": "^3.758.0"
+  }
+}

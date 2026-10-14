@@ -1,0 +1,10 @@
+{
+  "apps": [
+    {
+      "name": "mandelbrot",
+      "root": "../MandelbrotViewer",
+      "sdkDest": "js/vendor/baffled-screenshots.js",
+      "shotsConfig": "js/shotsConfig.js"
+    }
+  ]
+}
