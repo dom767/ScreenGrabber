@@ -2,7 +2,7 @@
 
 Shared screenshot API, storage, SDK, and admin UI for baffledcat.com apps.
 
-Consumer apps (e.g. [MandelbrotViewer](../MandelbrotViewer)) vendor the browser SDK and own their capture / map-pin UI. Deploy syncs `sdk/baffled-screenshots.js` into each app listed in `apps.json`.
+Consumer apps (e.g. [MandelbrotViewer](../MandelbrotViewer)) vendor the browser SDK and own their capture / map-pin UI. Each app pulls the canonical SDK during its own export; deploying ScreenGrabber never changes another repository.
 
 Homepage carousel (repo `Wooexperiments/baffledcat`) is **out of v1** — consume `GET /v1/shots?status=approved` when ready.
 
@@ -23,28 +23,18 @@ AWS resource names stay `baffledcat-*` for continuity with the existing producti
 
 ## Consumer apps
 
-Copy `apps.example.json` → `apps.json` (gitignored) and point each entry at a sibling app:
+Consumer repositories own their vendored SDK and configuration. Their export process
+should pull the canonical
+[`sdk/baffled-screenshots.js`](sdk/baffled-screenshots.js) from
+`https://raw.githubusercontent.com/dom767/ScreenGrabber/master/sdk/baffled-screenshots.js`
+into `js/vendor/baffled-screenshots.js` before bundling. The export should fail if the
+SDK cannot be refreshed rather than silently shipping a stale copy. This keeps SDK
+updates explicit in the app that consumes them and removes ScreenGrabber's dependency
+on local paths to sibling repositories.
 
-```json
-{
-  "apps": [
-    {
-      "name": "mandelbrot",
-      "root": "../MandelbrotViewer",
-      "sdkDest": "js/vendor/baffled-screenshots.js",
-      "shotsConfig": "js/shotsConfig.js"
-    },
-    {
-      "name": "bifurcation",
-      "root": "../BifurcationDiagram",
-      "sdkDest": "js/vendor/baffled-screenshots.js",
-      "shotsConfig": "js/shotsConfig.js"
-    }
-  ]
-}
-```
-
-After deploy, ScreenGrabber copies the SDK to each `sdkDest` and rewrites that app’s `apiBase` in `shotsConfig`.
+The stable production API base is `https://shots.baffledcat.com`; consumer
+`js/shotsConfig.js` files set it directly. Register allowed app IDs and origins in
+[`api/config.production.json`](api/config.production.json).
 
 ## Production deploy
 
@@ -69,8 +59,7 @@ TURNSTILE_SECRET=...
 1. Pack + deploy Lambda `baffledcat-screenshots`
 2. Ensure S3 bucket + DynamoDB tables + IAM role + HTTP API
 3. Request/wire ACM for `shots.baffledcat.com` and print DNS CNAMEs
-4. Sync SDK + `apiBase` into each app in `apps.json`
-5. Smoke-test `/health`
+4. Smoke-test `/health`
 
 Flags: `-SkipSecrets`, `-SkipDomain`, `-SkipCloudflareTeardown` (default on), `-DryRun`.
 

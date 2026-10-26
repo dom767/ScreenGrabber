@@ -7,7 +7,6 @@
   - Ensure S3 bucket, DynamoDB tables, IAM role, Lambda, HTTP API
   - Request/wire ACM custom domain shots.baffledcat.com when cert is issued
   - Persist secrets in api/.deploy-secrets.env (gitignored)
-  - Sync SDK into consumer apps listed in apps.json
   - Smoke-test /health
 
 .PARAMETER SkipSecrets
@@ -38,12 +37,9 @@ Set-StrictMode -Version Latest
 
 $RepoRoot = $PSScriptRoot
 $ApiDir = Join-Path $RepoRoot "api"
-$SdkSrc = Join-Path $RepoRoot "sdk\baffled-screenshots.js"
 $SecretsFile = Join-Path $ApiDir ".deploy-secrets.env"
 $StateFile = Join-Path $ApiDir ".deploy-state.json"
 $ProductionConfigFile = Join-Path $ApiDir "config.production.json"
-$AppsFile = Join-Path $RepoRoot "apps.json"
-$AppsExampleFile = Join-Path $RepoRoot "apps.example.json"
 
 $Region = if ($env:AWS_REGION) { $env:AWS_REGION } elseif ($env:AWS_DEFAULT_REGION) { $env:AWS_DEFAULT_REGION } else { "eu-west-2" }
 $AccountId = $null
@@ -137,34 +133,6 @@ function Load-State {
   $obj = Get-Content $StateFile -Raw | ConvertFrom-Json
   foreach ($p in $obj.PSObject.Properties) { $h[$p.Name] = $p.Value }
   return $h
-}
-
-function Get-ConsumerApps {
-  $path = $AppsFile
-  if (-not (Test-Path $path)) {
-    if (Test-Path $AppsExampleFile) {
-      Write-Warn "apps.json missing - copy apps.example.json to apps.json to sync SDKs"
-    }
-    return @()
-  }
-  $obj = Get-Content $path -Raw | ConvertFrom-Json
-  $list = @()
-  foreach ($app in @($obj.apps)) {
-    if (-not $app.root -or -not $app.sdkDest) { continue }
-    $root = $app.root
-    if (-not [System.IO.Path]::IsPathRooted($root)) {
-      $root = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $root))
-    }
-    $list += [pscustomobject]@{
-      name = [string]$app.name
-      root = $root
-      sdkDest = Join-Path $root ($app.sdkDest -replace '/', '\')
-      shotsConfig = if ($app.shotsConfig) {
-        Join-Path $root ($app.shotsConfig -replace '/', '\')
-      } else { $null }
-    }
-  }
-  return $list
 }
 
 function To-AwsFileUri([string]$path, [string]$scheme = "file") {
@@ -733,39 +701,6 @@ if (-not $DryRun) {
   Write-Ok "wrote api/.deploy-secrets.env and api/.deploy-state.json"
 }
 
-# Sync SDK + update shotsConfig apiBase for each consumer app
-Write-Step "Sync SDK + shotsConfig"
-$apps = @(Get-ConsumerApps)
-if ($apps.Count -eq 0) {
-  Write-Warn "No consumer apps configured (apps.json)"
-} elseif ($DryRun) {
-  foreach ($app in $apps) {
-    Write-Ok ("[dry-run] would sync SDK -> {0} ({1})" -f $app.sdkDest, $app.name)
-  }
-} else {
-  if (-not (Test-Path $SdkSrc)) { throw "SDK missing: $SdkSrc" }
-  foreach ($app in $apps) {
-    if (-not (Test-Path $app.root)) {
-      Write-Warn ("app root missing, skip {0}: {1}" -f $app.name, $app.root)
-      continue
-    }
-    $destDir = Split-Path -Parent $app.sdkDest
-    if (-not (Test-Path $destDir)) {
-      New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-    }
-    Copy-Item -Force $SdkSrc $app.sdkDest
-    Write-Ok ("SDK -> {0} ({1})" -f $app.sdkDest, $app.name)
-    if ($effectiveBase -and $app.shotsConfig -and (Test-Path $app.shotsConfig)) {
-      $cfg = Get-Content $app.shotsConfig -Raw
-      $cfg2 = [regex]::Replace($cfg, 'apiBase:\s*"[^"]*"', "apiBase: `"$effectiveBase`"")
-      if ($cfg2 -ne $cfg) {
-        Write-TextFile $app.shotsConfig $cfg2
-        Write-Ok ("{0} apiBase -> {1}" -f $app.name, $effectiveBase)
-      }
-    }
-  }
-}
-
 # Smoke test
 Write-Step "Smoke test"
 if ($DryRun) {
@@ -800,6 +735,4 @@ Write-Host ("  Tables:  {0}, {1}" -f $ShotsTable, $TicketsTable)
 if (-not $SkipSecrets) {
   Write-Host ("  ADMIN_TOKEN saved in api/.deploy-secrets.env")
 }
-Write-Host ""
-Write-Host "Consumer SDK sync uses apps.json (see apps.example.json)." -ForegroundColor Yellow
 Write-Host ""
