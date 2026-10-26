@@ -51,6 +51,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     .lightbox__img-wrap img {
       display:block; max-width:100%; height:auto; margin:0 auto;
     }
+    #confirm-dialog {
+      max-width:22rem; padding:1.1rem; border-radius:14px;
+      background:#262019; color:var(--fg); border:1px solid var(--border);
+      box-shadow:0 18px 48px rgba(0,0,0,.45);
+    }
+    #confirm-dialog::backdrop { background:rgba(12,10,8,.82); backdrop-filter:blur(4px); }
+    #confirm-dialog p { margin:0 0 1rem; }
+    #confirm-dialog .actions { justify-content:flex-end; }
   </style>
 </head>
 <body>
@@ -91,6 +99,15 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       </div>
     </div>
   </div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-msg">
+    <form method="dialog">
+      <p id="confirm-msg"></p>
+      <div class="actions">
+        <button type="submit" value="cancel" class="secondary" autofocus>Cancel</button>
+        <button type="submit" value="ok" class="danger">Delete</button>
+      </div>
+    </form>
+  </dialog>
   <script>
     const apiBase = location.origin;
     const tokenKey = "bc_shots_admin";
@@ -201,8 +218,18 @@ export const ADMIN_HTML = `<!DOCTYPE html>
       load();
     }
 
+    function confirmDialog(message) {
+      const dlg = $("confirm-dialog");
+      $("confirm-msg").textContent = message;
+      dlg.returnValue = "cancel";
+      dlg.showModal();
+      return new Promise((resolve) => {
+        dlg.addEventListener("close", () => resolve(dlg.returnValue === "ok"), { once: true });
+      });
+    }
+
     async function hardDelete(id) {
-      if (!confirm("Permanently delete this shot and its files?")) return;
+      if (!(await confirmDialog("Permanently delete this shot and its files?"))) return;
       await api("/v1/admin/shots/" + id, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
