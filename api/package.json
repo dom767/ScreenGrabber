@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test",
     "zip": "node scripts/pack.mjs",
     "deploy:code": "node scripts/pack.mjs && echo Run DeployScreengrabber.ps1"
   },

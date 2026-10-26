@@ -41,6 +41,7 @@ $ApiDir = Join-Path $RepoRoot "api"
 $SdkSrc = Join-Path $RepoRoot "sdk\baffled-screenshots.js"
 $SecretsFile = Join-Path $ApiDir ".deploy-secrets.env"
 $StateFile = Join-Path $ApiDir ".deploy-state.json"
+$ProductionConfigFile = Join-Path $ApiDir "config.production.json"
 $AppsFile = Join-Path $RepoRoot "apps.json"
 $AppsExampleFile = Join-Path $RepoRoot "apps.example.json"
 
@@ -469,7 +470,15 @@ if (-not $SkipSecrets) {
 
 # ---------- Lambda ----------
 Write-Step "Lambda '$FunctionName'"
-$allowedOrigins = "https://baffledcat.com,https://www.baffledcat.com,http://localhost:5173,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:8080"
+if (-not (Test-Path $ProductionConfigFile)) {
+  throw "Production config not found: $ProductionConfigFile"
+}
+$productionConfig = Get-Content $ProductionConfigFile -Raw | ConvertFrom-Json
+$allowedOrigins = (@($productionConfig.allowedOrigins) | ForEach-Object { [string]$_ }) -join ","
+$allowedAppIds = (@($productionConfig.allowedAppIds) | ForEach-Object { [string]$_ }) -join ","
+if (-not $allowedOrigins -or -not $allowedAppIds) {
+  throw "Production config must define allowedOrigins and allowedAppIds"
+}
 
 # Temporary PUBLIC_BASE_URL  -  updated after API/domain known
 $publicBase = Get-SecretValue "PUBLIC_BASE_URL" $fileMap
@@ -481,7 +490,7 @@ function Get-LambdaEnvFile([string]$baseUrl) {
     TICKETS_TABLE = $TicketsTable
     SHOTS_BUCKET = $BucketName
     ALLOWED_ORIGINS = $allowedOrigins
-    ALLOWED_APP_IDS = "mandelbrot"
+    ALLOWED_APP_IDS = $allowedAppIds
     PUBLIC_BASE_URL = $baseUrl
     MAX_UPLOAD_BYTES = "2097152"
     MAX_EDGE = "1920"

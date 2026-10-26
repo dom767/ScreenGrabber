@@ -33,6 +33,12 @@ Copy `apps.example.json` → `apps.json` (gitignored) and point each entry at a 
       "root": "../MandelbrotViewer",
       "sdkDest": "js/vendor/baffled-screenshots.js",
       "shotsConfig": "js/shotsConfig.js"
+    },
+    {
+      "name": "bifurcation",
+      "root": "../BifurcationDiagram",
+      "sdkDest": "js/vendor/baffled-screenshots.js",
+      "shotsConfig": "js/shotsConfig.js"
     }
   ]
 }
@@ -82,10 +88,18 @@ Use DNS-only (grey cloud) if the zone is on Cloudflare DNS.
 3. Put the **site key** in each consumer app’s `shotsConfig` and set `devBypassTurnstile: false`.
 4. Set `DEV_BYPASS_TURNSTILE=0` (or empty), then redeploy.
 
+The API submits each client token together with `TURNSTILE_SECRET` to
+Cloudflare's verification endpoint. The secret must belong to the Turnstile
+widget whose public site key is configured in the consumer. If a consumer uses
+a different widget, a human must update `TURNSTILE_SECRET` in the gitignored
+`api/.deploy-secrets.env` and redeploy; never add the secret to checked-in
+configuration.
+
 ### CORS / apps
 
-`ALLOWED_ORIGINS` — comma-separated browser origins allowed to call ticket/upload.  
-`ALLOWED_APP_IDS` — e.g. `mandelbrot`.
+Deployment builds the comma-separated `ALLOWED_ORIGINS` and `ALLOWED_APP_IDS`
+Lambda values from [`api/config.production.json`](api/config.production.json).
+Origin comparisons are exact; add each production origin explicitly.
 
 ## API contract
 

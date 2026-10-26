@@ -5,6 +5,12 @@
       "root": "../MandelbrotViewer",
       "sdkDest": "js/vendor/baffled-screenshots.js",
       "shotsConfig": "js/shotsConfig.js"
+    },
+    {
+      "name": "bifurcation",
+      "root": "../BifurcationDiagram",
+      "sdkDest": "js/vendor/baffled-screenshots.js",
+      "shotsConfig": "js/shotsConfig.js"
     }
   ]
 }
