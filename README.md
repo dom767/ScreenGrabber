@@ -36,6 +36,10 @@ The stable production API base is `https://shots.baffledcat.com`; consumer
 `js/shotsConfig.js` files set it directly. Register allowed app IDs and origins in
 [`api/config.production.json`](api/config.production.json).
 
+### Take Screenshot GUI
+
+Consumer apps should follow [`TAKE_SCREENSHOT_GUI.md`](TAKE_SCREENSHOT_GUI.md) for a consistent **"Take Screenshot"** panel (live preview, brightness and contrast sliders, **"Upload to baffledcat.com"** checkbox, and **"Capture"** button that downloads locally and optionally uploads).
+
 ## Production deploy
 
 From this repo root. Uses your normal **AWS CLI** credentials (`aws sts get-caller-identity`).
