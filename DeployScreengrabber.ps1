@@ -404,6 +404,11 @@ $policyDoc = @{
         "arn:aws:dynamodb:${Region}:${AccountId}:table/$ShotsTable/index/*",
         "arn:aws:dynamodb:${Region}:${AccountId}:table/$TicketsTable"
       )
+    },
+    @{
+      Effect = "Allow"
+      Action = @("ses:SendEmail", "ses:SendRawEmail")
+      Resource = "*"
     }
   )
 }
@@ -457,6 +462,9 @@ function Get-LambdaEnvFile([string]$baseUrl) {
     SHOTS_TABLE = $ShotsTable
     TICKETS_TABLE = $TicketsTable
     SHOTS_BUCKET = $BucketName
+    FAILED_LOG_PREFIX = "logs/failed-attempts"
+    ALERT_EMAIL = "images@baffledcat.com"
+    ALERT_FROM_EMAIL = "images@baffledcat.com"
     ALLOWED_ORIGINS = $allowedOrigins
     ALLOWED_APP_IDS = $allowedAppIds
     PUBLIC_BASE_URL = $baseUrl

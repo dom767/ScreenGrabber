@@ -11,6 +11,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
 import { corsHeaders, withCors } from "./cors.js";
 import {
   issueTicket,
+  issueDecoyTicket,
   verifyTicket,
   consumeTicket,
   purgeExpiredTickets,
@@ -19,19 +20,44 @@ import { validateImageBytes, sha256Hex } from "./image.js";
 import { rateLimit } from "./ratelimit.js";
 import { parseMultipart } from "./multipart.js";
 import { ADMIN_HTML } from "./adminHtml.js";
+import {
+  DEFAULT_ALERT_EMAIL,
+  DEFAULT_LOG_PREFIX,
+  recordFailedAttempt,
+} from "./audit.js";
 
 const ALLOWED_STATUS = new Set(["pending", "approved", "hidden"]);
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+const rawDdb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
 });
-const s3 = new S3Client({});
+const rawS3 = new S3Client({});
+
+export const ddb = {
+  send: async (command) => {
+    if (process.env.NODE_TEST_CONTEXT) return {};
+    return rawDdb.send(command);
+  },
+};
+
+export const s3 = {
+  send: async (command) => {
+    if (process.env.NODE_TEST_CONTEXT) return {};
+    return rawS3.send(command);
+  },
+};
 
 function env() {
   return {
     SHOTS_TABLE: process.env.SHOTS_TABLE || "baffledcat-shots",
     TICKETS_TABLE: process.env.TICKETS_TABLE || "baffledcat-shots-tickets",
     BUCKET: process.env.SHOTS_BUCKET || "baffledcat-shots",
+    FAILED_LOG_PREFIX: process.env.FAILED_LOG_PREFIX || DEFAULT_LOG_PREFIX,
+    ALERT_EMAIL: process.env.ALERT_EMAIL || DEFAULT_ALERT_EMAIL,
+    ALERT_FROM_EMAIL:
+      process.env.ALERT_FROM_EMAIL ||
+      process.env.ALERT_EMAIL ||
+      DEFAULT_ALERT_EMAIL,
     ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || "",
     ALLOWED_APP_IDS: process.env.ALLOWED_APP_IDS || "mandelbrot",
     PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || "",
@@ -176,61 +202,108 @@ export async function handler(event) {
 
 async function handleTicket(event, e, origin) {
   const { ok: originOk } = corsHeaders(e, origin);
-  if (!originOk) return json({ error: "origin not allowed" }, 403);
-
   const ip = clientIp(event);
+  const ipHash = await hashIp(ip, e.TICKET_HMAC_SECRET);
+  const userAgent = header(event, "user-agent");
+  const reasons = [];
+
+  if (!originOk) reasons.push("origin not allowed");
   if (!rateLimit(`ticket:${ip}`, { limit: 30, windowMs: 60_000 })) {
-    return json({ error: "rate limited" }, 429);
+    reasons.push("rate limited");
   }
 
-  let body;
+  let body = {};
+  let jsonValid = true;
   try {
-    body = JSON.parse(decodeBody(event).toString("utf8") || "{}");
+    const parsed = JSON.parse(decodeBody(event).toString("utf8") || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      body = parsed;
+    } else {
+      jsonValid = false;
+    }
   } catch {
-    return json({ error: "invalid json" }, 400);
+    jsonValid = false;
+  }
+  if (!jsonValid) {
+    reasons.push("invalid json");
   }
 
   const appId = String(body.appId || "");
-  if (!allowedApps(e).includes(appId)) {
-    return json({ error: "unknown appId" }, 400);
-  }
-
   const bytes = Number(body.bytes);
   const contentSha256 = String(body.contentSha256 || "");
-  if (!Number.isFinite(bytes) || bytes < 1 || bytes > Number(e.MAX_UPLOAD_BYTES || 2_097_152)) {
-    return json({ error: "invalid bytes" }, 400);
-  }
-  if (!/^[a-f0-9]{64}$/i.test(contentSha256)) {
-    return json({ error: "invalid contentSha256" }, 400);
-  }
 
-  const turnstileOk = await verifyTurnstile(e, body.turnstileToken, ip);
-  if (!turnstileOk) return json({ error: "turnstile failed" }, 403);
+  if (jsonValid) {
+    if (!allowedApps(e).includes(appId)) {
+      reasons.push("unknown appId");
+    }
+    if (
+      !Number.isFinite(bytes) ||
+      bytes < 1 ||
+      bytes > Number(e.MAX_UPLOAD_BYTES || 2_097_152)
+    ) {
+      reasons.push("invalid bytes");
+    }
+    if (!/^[a-f0-9]{64}$/i.test(contentSha256)) {
+      reasons.push("invalid contentSha256");
+    }
+    if (reasons.length === 0) {
+      const turnstileOk = await verifyTurnstile(e, body.turnstileToken, ip);
+      if (!turnstileOk) reasons.push("turnstile failed");
+    }
+  }
 
   if (!e.TICKET_HMAC_SECRET) {
-    return json({ error: "server misconfigured" }, 500);
+    reasons.push("server misconfigured");
+  }
+
+  const expiresIn = Number(e.TICKET_TTL_SEC || 120);
+  if (reasons.length > 0) {
+    await recordFailedAttempt({
+      s3,
+      env: e,
+      endpoint: "/v1/ticket",
+      method: "POST",
+      reason: reasons[0],
+      reasons,
+      appId,
+      origin,
+      ip,
+      ipHash,
+      userAgent,
+      details: {
+        bytes: Number.isFinite(bytes) ? bytes : null,
+        contentSha256: contentSha256 ? contentSha256.slice(0, 64) : null,
+      },
+    });
+    const decoy = issueDecoyTicket(e, { appId, bytes, contentSha256 });
+    return json({ ticket: decoy, expiresIn });
   }
 
   const ticket = await issueTicket(e, { appId, bytes, contentSha256 });
-  return json({ ticket, expiresIn: Number(e.TICKET_TTL_SEC || 120) });
+  return json({ ticket, expiresIn });
 }
 
 async function handleUpload(event, e, origin) {
   const { ok: originOk } = corsHeaders(e, origin);
-  if (!originOk) return json({ error: "origin not allowed" }, 403);
-
   const ip = clientIp(event);
+  const ipHash = await hashIp(ip, e.TICKET_HMAC_SECRET);
+  const userAgent = header(event, "user-agent");
+  const reasons = [];
+
+  if (!originOk) reasons.push("origin not allowed");
   if (!rateLimit(`upload:${ip}`, { limit: 15, windowMs: 60_000 })) {
-    return json({ error: "rate limited" }, 429);
+    reasons.push("rate limited");
   }
 
   const contentType = header(event, "content-type");
-  let fields;
-  let files;
+  let fields = {};
+  let files = {};
+  let multipartOk = true;
   try {
     ({ fields, files } = parseMultipart(decodeBody(event), contentType));
   } catch {
-    return json({ error: "expected multipart form" }, 400);
+    multipartOk = false;
+    reasons.push("expected multipart form");
   }
 
   const ticket = String(fields.ticket || "");
@@ -238,49 +311,100 @@ async function handleUpload(event, e, origin) {
   const pageUrl = String(fields.pageUrl || "").slice(0, 2048);
   const title = sanitizeText(fields.title, 120);
   const note = sanitizeText(fields.note, 500);
-  let metaJson = fields.meta || fields.meta_json || "{}";
-  if (metaJson.length > 8000) return json({ error: "meta too large" }, 400);
+  const metaJson = String(fields.meta || fields.meta_json || "{}");
 
-  const imageFile = files.image;
-  const thumbFile = files.thumb;
-  if (!imageFile || !thumbFile) {
-    return json({ error: "image and thumb required" }, 400);
-  }
+  let imageBuf = null;
+  let thumbBuf = null;
+  let imgCheck = null;
+  let thumbCheck = null;
 
-  const imageBuf = new Uint8Array(imageFile.data);
-  const thumbBuf = new Uint8Array(thumbFile.data);
+  if (multipartOk) {
+    if (!allowedApps(e).includes(appId)) {
+      reasons.push("unknown appId");
+    }
+    if (metaJson.length > 8000) {
+      reasons.push("meta too large");
+    }
 
-  const imgCheck = validateImageBytes(imageBuf, e, { expectSquare: false });
-  if (!imgCheck.ok) return json({ error: imgCheck.error }, 400);
-  const thumbCheck = validateImageBytes(thumbBuf, e, { expectSquare: true });
-  if (!thumbCheck.ok) return json({ error: thumbCheck.error }, 400);
+    const imageFile = files.image;
+    const thumbFile = files.thumb;
+    if (!imageFile || !thumbFile) {
+      reasons.push("image and thumb required");
+    } else {
+      imageBuf = new Uint8Array(imageFile.data);
+      thumbBuf = new Uint8Array(thumbFile.data);
 
-  const contentSha256 = await sha256Hex(imageBuf);
-  const verified = await verifyTicket(e, ticket, {
-    appId,
-    bytes: imageBuf.length,
-    contentSha256,
-  });
-  if (!verified.ok) return json({ error: verified.error }, 403);
+      imgCheck = validateImageBytes(imageBuf, e, { expectSquare: false });
+      if (!imgCheck.ok) reasons.push(imgCheck.error);
 
-  // fire-and-forget cleanup
-  purgeExpiredTickets(ddb, e.TICKETS_TABLE).catch(() => {});
-  const consumed = await consumeTicket(
-    ddb,
-    e.TICKETS_TABLE,
-    verified.payload.jti,
-    verified.payload.exp
-  );
-  if (!consumed) return json({ error: "ticket already used" }, 403);
+      thumbCheck = validateImageBytes(thumbBuf, e, { expectSquare: true });
+      if (!thumbCheck.ok) reasons.push(thumbCheck.error);
+    }
 
-  if (!allowedApps(e).includes(appId)) {
-    return json({ error: "unknown appId" }, 400);
+    const contentSha256 = imageBuf ? await sha256Hex(imageBuf) : "";
+    const verified = await verifyTicket(e, ticket, {
+      appId,
+      bytes: imageBuf ? imageBuf.length : 0,
+      contentSha256,
+    });
+    if (!verified.ok) {
+      reasons.push(verified.error);
+    } else if (reasons.length === 0) {
+      // fire-and-forget cleanup
+      purgeExpiredTickets(ddb, e.TICKETS_TABLE).catch(() => {});
+      const consumed = await consumeTicket(
+        ddb,
+        e.TICKETS_TABLE,
+        verified.payload.jti,
+        verified.payload.exp
+      );
+      if (!consumed) reasons.push("ticket already used");
+    }
   }
 
   const id = crypto.randomUUID().replace(/-/g, "");
-  const ext = extForMime(imgCheck.mime);
-  const imageKey = `shots/${appId}/${id}.${ext}`;
-  const thumbKey = `shots/${appId}/${id}_thumb.jpg`;
+  const safeAppId = (appId || "shot").replace(/[^a-zA-Z0-9_-]/g, "") || "shot";
+  const ext = imgCheck?.ok ? extForMime(imgCheck.mime) : "jpg";
+  const imageKey = `shots/${safeAppId}/${id}.${ext}`;
+  const thumbKey = `shots/${safeAppId}/${id}_thumb.jpg`;
+  const base = (e.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+
+  if (reasons.length > 0) {
+    await recordFailedAttempt({
+      s3,
+      env: e,
+      endpoint: "/v1/shots",
+      method: "POST",
+      reason: reasons[0],
+      reasons,
+      appId,
+      origin,
+      ip,
+      ipHash,
+      userAgent,
+      pageUrl: pageUrl || null,
+      details: {
+        imageBytes: imageBuf ? imageBuf.length : null,
+        thumbBytes: thumbBuf ? thumbBuf.length : null,
+        imageMime: imgCheck?.mime || null,
+        imageWidth: imgCheck?.width || null,
+        imageHeight: imgCheck?.height || null,
+        thumbWidth: thumbCheck?.width || null,
+        thumbHeight: thumbCheck?.height || null,
+        metaLength: metaJson.length,
+        hasTicket: Boolean(ticket),
+      },
+    });
+
+    return json({
+      id,
+      imageUrl: `${base}/i/${imageKey}`,
+      thumbUrl: `${base}/i/${thumbKey}`,
+      width: imgCheck?.width || 1920,
+      height: imgCheck?.height || 1080,
+      status: "approved",
+    });
+  }
 
   await s3.send(
     new PutObjectCommand({
@@ -302,7 +426,6 @@ async function handleUpload(event, e, origin) {
   );
 
   const createdAt = Date.now();
-  const ipHash = await hashIp(ip, e.TICKET_HMAC_SECRET);
   const status = "approved";
   const item = {
     id,
@@ -326,7 +449,6 @@ async function handleUpload(event, e, origin) {
 
   await ddb.send(new PutCommand({ TableName: e.SHOTS_TABLE, Item: item }));
 
-  const base = (e.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
   return json({
     id,
     imageUrl: `${base}/i/${imageKey}`,

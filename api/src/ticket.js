@@ -58,8 +58,28 @@ export async function issueTicket(env, { appId, bytes, contentSha256 }) {
   return `${body}.${sig}`;
 }
 
+export function issueDecoyTicket(env, { appId, bytes, contentSha256 } = {}) {
+  const ttl = Number(env.TICKET_TTL_SEC || 120);
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    jti: crypto.randomUUID(),
+    appId: appId || "unknown",
+    bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : 0,
+    contentSha256:
+      typeof contentSha256 === "string" && /^[a-f0-9]{64}$/i.test(contentSha256)
+        ? contentSha256
+        : "0".repeat(64),
+    iat: now,
+    exp: now + ttl,
+  };
+  const body = b64urlJson(payload);
+  const randomSig = crypto.getRandomValues(new Uint8Array(32));
+  return `${body}.${b64url(randomSig)}`;
+}
+
 export async function verifyTicket(env, token, { appId, bytes, contentSha256 }) {
   if (!token || typeof token !== "string") return { ok: false, error: "missing ticket" };
+  if (!env.TICKET_HMAC_SECRET) return { ok: false, error: "server misconfigured" };
   const parts = token.split(".");
   if (parts.length !== 2) return { ok: false, error: "bad ticket" };
   const [body, sig] = parts;

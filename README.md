@@ -94,6 +94,13 @@ Deployment builds the comma-separated `ALLOWED_ORIGINS` and `ALLOWED_APP_IDS`
 Lambda values from [`api/config.production.json`](api/config.production.json).
 Origin comparisons are exact; add each production origin explicitly.
 
+### Validation & failed-attempt logging
+
+To avoid giving hints to attackers probing `POST /v1/ticket` or `POST /v1/shots`, validation failures (unrecognised `appId`, disallowed `origin`, invalid image dimensions/MIME, bad/expired ticket, Turnstile failure, or rate-limiting) still return a normal-looking `200` success payload without storing the image:
+
+- Failed attempts are written as structured JSON logs to the private S3 bucket under `s3://baffledcat-shots/logs/failed-attempts/YYYY-MM-DD/<timestamp>-<id>.json` (not accessible via `/i/...`) and to CloudWatch Logs.
+- Each failed attempt sends an alert email via Amazon SES (`eu-west-2`) to `images@baffledcat.com` (`ALERT_EMAIL`). Ensure `images@baffledcat.com` (or the `baffledcat.com` domain) is verified in SES.
+
 ## API contract
 
 ### `POST /v1/ticket`
