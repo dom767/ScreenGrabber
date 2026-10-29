@@ -134,6 +134,77 @@ test("ticket validation submits the configured Turnstile secret", async () => {
   assert.equal(verificationBody.get("response"), "test-bypass");
 });
 
+for (const origin of [
+  "https://baffledcat.com",
+  "http://localhost:7100",
+  "http://127.0.0.1:7100",
+]) {
+  test(`production config accepts fluidsimulator tickets from ${origin} with Turnstile enabled`, async () => {
+    process.env.DEV_BYPASS_TURNSTILE = "0";
+    const response = await handler(ticketEvent({ appId: "fluidsimulator", origin }));
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["Access-Control-Allow-Origin"], origin);
+    assert.equal(typeof JSON.parse(response.body).ticket, "string");
+    assert.equal(s3Commands.length, 0);
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0].url, "https://challenges.cloudflare.com/turnstile/v0/siteverify");
+  });
+}
+
+test("FluidSimulator JPEG upload at 1920x1080 and 2 MiB stores image, thumbnail, and metadata", async () => {
+  // Minimal JPEG SOF headers exercise the API's header validation, not JPEG decoding.
+  function makeFakeJpeg(width, height, bytes = 32) {
+    const image = new Uint8Array(bytes);
+    image.set([0xff, 0xd8, 0xff, 0xc0, 0, 17, 8,
+      height >> 8, height & 255, width >> 8, width & 255, 3]);
+    return image;
+  }
+
+  process.env.DEV_BYPASS_TURNSTILE = "0";
+  const image = makeFakeJpeg(1920, 1080, 2_097_152);
+  const thumb = makeFakeJpeg(256, 256);
+  const response = await handler(ticketEvent({
+    appId: "fluidsimulator",
+    bytes: image.length,
+    contentSha256: await sha256Hex(image),
+    sourceIp: "203.0.113.59",
+  }));
+  const { boundary, body } = buildMultipartBody({
+    fields: { ticket: JSON.parse(response.body).ticket, appId: "fluidsimulator" },
+    files: {
+      image: { filename: "shot.jpg", mime: "image/jpeg", data: image },
+      thumb: { filename: "thumb.jpg", mime: "image/jpeg", data: thumb },
+    },
+  });
+  const upload = await handler({
+    rawPath: "/v1/shots",
+    headers: {
+      origin: "https://baffledcat.com",
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    },
+    requestContext: { http: { method: "POST", sourceIp: "203.0.113.59" } },
+    body: body.toString("base64"),
+    isBase64Encoded: true,
+  });
+
+  assert.equal(upload.statusCode, 200);
+  assert.equal(JSON.parse(upload.body).width, 1920);
+  assert.equal(JSON.parse(upload.body).height, 1080);
+  assert.equal(s3Commands.length, 2);
+  for (const command of s3Commands) {
+    assert.match(command.input.Key, /^shots\/fluidsimulator\/.*\.jpg$/);
+    assert.equal(command.input.ContentType, "image/jpeg");
+  }
+  assert.equal(s3Commands[0].input.Body.length, image.length);
+  assert.equal(s3Commands[1].input.Body.length, thumb.length);
+  const metadata = ddbCommands.find((command) => command.input.Item?.imageKey)?.input.Item;
+  assert.equal(metadata.appId, "fluidsimulator");
+  assert.equal(metadata.thumbSize, 256);
+  assert.equal(metadata.bytes, 2_097_152);
+  assert.equal(fetchCalls.length, 1);
+});
+
 test("unknown app IDs on ticket return a decoy 200 success, store private S3 log, and email images@baffledcat.com", async () => {
   const response = await handler(ticketEvent({ appId: "unknown-app", sourceIp: "203.0.113.11" }));
 

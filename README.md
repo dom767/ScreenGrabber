@@ -94,6 +94,26 @@ Deployment builds the comma-separated `ALLOWED_ORIGINS` and `ALLOWED_APP_IDS`
 Lambda values from [`api/config.production.json`](api/config.production.json).
 Origin comparisons are exact; add each production origin explicitly.
 
+FluidSimulator is registered as `fluidsimulator`, with production origin
+`https://baffledcat.com` and development origins `http://localhost:7100` and
+`http://127.0.0.1:7100`. It vendors the canonical SDK, uses
+`https://shots.baffledcat.com`, and sends JPEG images up to 1920x1080 and 2 MiB
+with a 256x256 JPEG thumbnail.
+
+Its public Turnstile site key is `0x4AAAAAAFWa6VDrVl29LSiw`, with
+`devBypassTurnstile: false`. On 2026-10-29 this matched the configuration in the
+public deployed Mandelbrot bundle at
+`https://baffledcat.com/mandelbrot/app.bundle.min.js?v=6`. Public client
+configuration does not prove the API secret belongs to that widget. A human
+must confirm that association in Cloudflare and ensure the widget permits
+`baffledcat.com`, `localhost`, and `127.0.0.1` (hostname settings, without ports).
+Any widget hostname changes remain a human step.
+
+To activate this registration, a human must run the production deploy from this
+repository (`.\DeployScreengrabber.cmd`), which applies the allowlists to Lambda.
+Keep production `DEV_BYPASS_TURNSTILE=0`. Registration changes alone do not update
+the deployed API; no deployment or widget changes were performed for this registration.
+
 ### Validation & failed-attempt logging
 
 To avoid giving hints to attackers probing `POST /v1/ticket` or `POST /v1/shots`, validation failures (unrecognised `appId`, disallowed `origin`, invalid image dimensions/MIME, bad/expired ticket, Turnstile failure, or rate-limiting) still return a normal-looking `200` success payload without storing the image:
