@@ -40,6 +40,34 @@ The stable production API base is `https://shots.baffledcat.com`; consumer
 
 Consumer apps should follow [`TAKE_SCREENSHOT_GUI.md`](TAKE_SCREENSHOT_GUI.md) for a consistent **"Take Screenshot"** panel (live preview, brightness and contrast sliders, **"Upload to baffledcat.com"** checkbox, and **"Capture"** button that downloads locally and optionally uploads).
 
+## Repository commands
+
+AgentController discovers the three Node actions under `actions/`. The matching
+root `.cmd` wrappers work from Explorer or a terminal. Node.js 20+ and npm are
+required. Set `AC_NO_PAUSE=1` for unattended wrappers; otherwise they pause on failure.
+
+| Command | Behaviour |
+| --- | --- |
+| `Build.cmd` / `node actions/Build.mjs` | Install production dependencies in `api/dist` and package `api/function.zip`, without publishing or accessing deployment secrets. |
+| `DeployLocal.cmd` / `node actions/DeployLocal.mjs` | Build the same local bundle and print its location and local limitations. |
+| `DeployProd.cmd` / `node actions/DeployProd.mjs` | Human-only production deployment through the existing `DeployScreengrabber.ps1` workflow. |
+
+Build reuses `api/scripts/pack.mjs`; its archive step currently requires Windows
+PowerShell on Windows or the `zip` executable elsewhere. npm needs access to the
+package registry (or cached dependencies). Build replaces `api/dist` and
+`api/function.zip`; it does not claim a release number or call AWS.
+
+There is no local API runner, isolated dev stack, or AWS emulator configured for
+this service. **Deploy Local means local packaging only**: it starts no server
+and deploys no cloud resources. The Lambda expects API Gateway events and AWS
+S3/DynamoDB services, so this bundle alone is not a runnable local API.
+
+The production action is a migration bridge to the existing PowerShell script,
+preserving Lambda + API Gateway provisioning, production allowlists, and secret
+handling. It requires Windows PowerShell (or `pwsh` elsewhere) and AWS CLI.
+Agents may run Build and Deploy Local; they must never run Deploy Prod, including
+the legacy production entry points or their `-DryRun` mode.
+
 ## Production deploy
 
 From this repo root. Uses your normal **AWS CLI** credentials (`aws sts get-caller-identity`).
@@ -54,8 +82,8 @@ TURNSTILE_SECRET=...
 ```
 
 ```powershell
-.\DeployScreengrabber.cmd
-# or: .\DeployScreengrabber.ps1
+.\DeployProd.cmd
+# or: node actions/DeployProd.mjs
 ```
 
 `DeployScreengrabber.ps1` will:
@@ -65,7 +93,11 @@ TURNSTILE_SECRET=...
 3. Request/wire ACM for `shots.baffledcat.com` and print DNS CNAMEs
 4. Smoke-test `/health`
 
-Flags: `-SkipSecrets`, `-SkipDomain`, `-SkipCloudflareTeardown` (default on), `-DryRun`.
+Flags are forwarded unchanged: `-SkipSecrets`, `-SkipDomain`,
+`-CloudflareTeardown` (opt-in; off by default), `-DryRun`.
+`DeployScreengrabber.cmd` remains a compatibility alias for Deploy Prod;
+`DeployScreengrabber.ps1` remains the production implementation. Even `-DryRun`
+uses AWS credentials and reads deployment secrets; use Build for packaging only.
 
 ### DNS for `shots.baffledcat.com`
 
@@ -110,7 +142,7 @@ must confirm that association in Cloudflare and ensure the widget permits
 Any widget hostname changes remain a human step.
 
 To activate this registration, a human must run the production deploy from this
-repository (`.\DeployScreengrabber.cmd`), which applies the allowlists to Lambda.
+repository (`.\DeployProd.cmd`), which applies the allowlists to Lambda.
 Keep production `DEV_BYPASS_TURNSTILE=0`. Registration changes alone do not update
 the deployed API; no deployment or widget changes were performed for this registration.
 
