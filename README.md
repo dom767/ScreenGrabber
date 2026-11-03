@@ -38,7 +38,7 @@ The stable production API base is `https://shots.baffledcat.com`; consumer
 
 ### Take Screenshot GUI
 
-Consumer apps should follow [`TAKE_SCREENSHOT_GUI.md`](TAKE_SCREENSHOT_GUI.md) for a consistent **"Take Screenshot"** panel (live preview, brightness and contrast sliders, **"Upload to baffledcat.com"** checkbox, and **"Capture"** button that downloads locally and optionally uploads).
+Consumer apps should follow [`TAKE_SCREENSHOT_GUI.md`](TAKE_SCREENSHOT_GUI.md) for a consistent **"Take Screenshot"** panel (live preview, brightness and contrast sliders, **"Upload to baffledcat.com"** checkbox **checked by default**, and **"Capture"** button that downloads locally and optionally uploads).
 
 ## Repository commands
 

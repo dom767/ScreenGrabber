@@ -16,7 +16,7 @@ For the underlying upload and gallery SDK contract, see [`README.md`](README.md)
    - **Live preview:** Displays how the captured image will look with the current brightness and contrast adjustments applied.
    - **Brightness slider:** Adjusts output image brightness (`-100` to `+100`, default `0`, or `50%` to `150%`, default `100%`).
    - **Contrast slider:** Adjusts output image contrast (`-100` to `+100`, default `0`, or `50%` to `150%`, default `100%`).
-   - **Upload checkbox:** A checkbox labeled **"Upload to baffledcat.com"** (checked or unchecked per app default; unchecked by default unless the app specifies otherwise, or persisted in `localStorage` if desired).
+   - **Upload checkbox:** A checkbox labeled **"Upload to baffledcat.com"**. Apps that implement the ScreenGrabber API **default this to checked** (`true`). The user may uncheck it for a local-only capture. Optionally persist the last choice in `localStorage`.
 
 3. **Capture Action ("Capture"):**
    - Clicking the primary **"Capture"** button produces the final adjusted image (with brightness and contrast baked into the exported pixels):
@@ -38,7 +38,7 @@ For the underlying upload and gallery SDK contract, see [`README.md`](README.md)
 | **Brightness** | `<input type="range">` | `BRIGHTNESS` | `50` to `150`, step `1`, default `100` (`100%`) | Scales pixel brightness; displays current value (`100%` or `+0`) |
 | **Contrast** | `<input type="range">` | `CONTRAST` | `50` to `150`, step `1`, default `100` (`100%`) | Scales pixel contrast; displays current value (`100%` or `+0`) |
 | **Reset** *(optional)* | `<button type="button">` | `Reset` | Ghost/secondary button | Resets brightness and contrast to `100%` |
-| **Upload toggle** | `<input type="checkbox">` | `Upload to baffledcat.com` | Unchecked by default (or app default) | When checked, **Capture** also uploads via ScreenGrabber SDK |
+| **Upload toggle** | `<input type="checkbox">` | `Upload to baffledcat.com` | **Checked by default** for apps that implement the ScreenGrabber API | When checked, **Capture** also uploads via ScreenGrabber SDK |
 | **Cancel / Close** | `<button type="button">` | `Cancel` / `×` | Secondary pill button | Closes the panel without downloading or uploading |
 | **Primary action** | `<button type="button">` | `Capture` | Primary amber pill button | Triggers local download and (if checked) upload to `baffledcat.com` |
 
@@ -122,7 +122,7 @@ Apps may mount the panel either as a native `<dialog>` modal or an anchored floa
       </div>
 
       <label class="bc-shot-checkbox">
-        <input type="checkbox" id="screenshot-upload-check" />
+        <input type="checkbox" id="screenshot-upload-check" checked />
         <span>Upload to baffledcat.com</span>
       </label>
     </div>
