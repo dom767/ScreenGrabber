@@ -20,6 +20,7 @@ import { validateImageBytes, sha256Hex } from "./image.js";
 import { rateLimit } from "./ratelimit.js";
 import { parseMultipart } from "./multipart.js";
 import { ADMIN_HTML } from "./adminHtml.js";
+import { ASSET_VERSION } from "./version.js";
 import {
   DEFAULT_ALERT_EMAIL,
   DEFAULT_LOG_PREFIX,
@@ -186,9 +187,10 @@ export async function handler(event) {
     } else if (path.startsWith("/i/") && method === "GET") {
       response = await handleAsset(path.slice(3), e);
     } else if (path === "/" || path === "/health") {
-      response = json({ ok: true, service: "baffledcat-screenshots" });
+      response = json({ ok: true, service: "baffledcat-screenshots", version: ASSET_VERSION });
     } else if (path === "/admin" || path.startsWith("/admin/")) {
-      response = path === "/admin" || path === "/admin/" ? html(ADMIN_HTML) : json({ error: "not found" }, 404);
+      const page = ADMIN_HTML.replaceAll("__SCREENGRABBER_ASSET_VERSION__", ASSET_VERSION);
+      response = path === "/admin" || path === "/admin/" ? html(page) : json({ error: "not found" }, 404);
     } else {
       response = json({ error: "not found" }, 404);
     }

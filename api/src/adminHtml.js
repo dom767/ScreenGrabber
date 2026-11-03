@@ -4,6 +4,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Baffled Cat Shots — Admin</title>
+  <script>self.__SCREENGRABBER_ASSET_VERSION__ = "__SCREENGRABBER_ASSET_VERSION__";</script>
   <style>
     :root { color-scheme: dark; --bg:#1c1812; --fg:#f6efe2; --muted:#b3a68e; --amber:#f2a544; --border:rgba(246,239,226,.12); }
     * { box-sizing: border-box; }

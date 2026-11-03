@@ -1,9 +1,10 @@
 @echo off
+rem Wrapper only — logic is in actions\DeployLocal.mjs (guidelines/repository-commands.md).
 setlocal
 cd /d "%~dp0"
 node "%~dp0actions\DeployLocal.mjs" %*
-set "EXITCODE=%ERRORLEVEL%"
-if not "%EXITCODE%"=="0" (
+if errorlevel 1 (
   if not defined AC_NO_PAUSE pause
+  exit /b 1
 )
-exit /b %EXITCODE%
+exit /b 0

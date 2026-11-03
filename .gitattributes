@@ -1,0 +1,13 @@
+# Same line endings on every machine: LF in the repo and in checkouts.
+* text=auto eol=lf
+
+# Windows scripts need CRLF.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary files: never touch.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

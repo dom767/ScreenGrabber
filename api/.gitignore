@@ -2,6 +2,7 @@ node_modules/
 dist/
 .deploy-secrets.env
 .deploy-state.json
+.deploy-lambda-env.json
 *.local
 function.zip
 # keep example

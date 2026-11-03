@@ -1,8 +1,12 @@
 <#
 .SYNOPSIS
-  Provision AWS infra for ScreenGrabber (baffledcat-screenshots) and deploy the Lambda API.
+  First-time / repair: provision AWS infra for ScreenGrabber (baffledcat-screenshots).
 
 .DESCRIPTION
+  Normal production deploys use DeployProd.cmd (actions/DeployProd.mjs): claim N, package
+  Export/VersionN, update Lambda code/config, verify /health.version. Use this script only
+  when creating or repairing the stack (bucket, tables, IAM, API Gateway, ACM domain).
+
   - npm install + zip Lambda package (api/)
   - Ensure S3 bucket, DynamoDB tables, IAM role, Lambda, HTTP API
   - Request/wire ACM custom domain shots.baffledcat.com when cert is issued
@@ -22,7 +26,7 @@
   Print actions without creating resources or deploying.
 
 .EXAMPLE
-  .\DeployScreengrabber.ps1
+  .\scripts\ensure-aws.ps1
 #>
 [CmdletBinding()]
 param(
@@ -35,7 +39,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$RepoRoot = $PSScriptRoot
+$RepoRoot = Split-Path $PSScriptRoot -Parent
 $ApiDir = Join-Path $RepoRoot "api"
 $SecretsFile = Join-Path $ApiDir ".deploy-secrets.env"
 $StateFile = Join-Path $ApiDir ".deploy-state.json"
@@ -112,7 +116,7 @@ function Get-SecretValueOrEmpty([string]$key, $fileMap) {
 
 function Save-Secrets($map) {
   $lines = @(
-    "# Generated/updated by DeployScreengrabber.ps1  -  do not commit",
+    "# Generated/updated by scripts/ensure-aws.ps1  -  do not commit",
     "AWS_REGION=$Region"
   )
   foreach ($k in @("TICKET_HMAC_SECRET", "ADMIN_TOKEN", "TURNSTILE_SECRET", "DEV_BYPASS_TURNSTILE", "PUBLIC_BASE_URL")) {
@@ -175,7 +179,7 @@ function Require-AwsOk($result, [string]$what) {
 }
 
 Write-Host ""
-Write-Host ("DeployScreengrabber - {0} -> {1}" -f $FunctionName, $PreferredBaseUrl) -ForegroundColor White
+Write-Host ("ensure-aws (infra) - {0} -> {1}" -f $FunctionName, $PreferredBaseUrl) -ForegroundColor White
 Write-Host ("Region: {0}" -f $Region)
 
 Assert-Command "aws"

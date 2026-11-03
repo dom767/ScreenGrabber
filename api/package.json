@@ -5,7 +5,7 @@
   "scripts": {
     "test": "node --test",
     "zip": "node scripts/pack.mjs",
-    "deploy:code": "node scripts/pack.mjs && echo Run DeployScreengrabber.ps1"
+    "deploy:code": "node scripts/pack.mjs && echo Use DeployProd.cmd for production (humans only)"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.758.0",

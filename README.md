@@ -42,35 +42,24 @@ Consumer apps should follow [`TAKE_SCREENSHOT_GUI.md`](TAKE_SCREENSHOT_GUI.md) f
 
 ## Repository commands
 
-AgentController discovers the three Node actions under `actions/`. The matching
-root `.cmd` wrappers work from Explorer or a terminal. Node.js 20+ and npm are
-required. Set `AC_NO_PAUSE=1` for unattended wrappers; otherwise they pause on failure.
+AgentController discovers the three Node actions under `actions/`. Matching root
+`.cmd` wrappers work from Explorer or a terminal. See [`deploy.md`](deploy.md).
+Node.js 20+ and npm are required. Set `AC_NO_PAUSE=1` for unattended wrappers.
 
 | Command | Behaviour |
 | --- | --- |
-| `Build.cmd` / `node actions/Build.mjs` | Install production dependencies in `api/dist` and package `api/function.zip`, without publishing or accessing deployment secrets. |
-| `DeployLocal.cmd` / `node actions/DeployLocal.mjs` | Build the same local bundle and print its location and local limitations. |
-| `DeployProd.cmd` / `node actions/DeployProd.mjs` | Human-only production deployment through the existing `DeployScreengrabber.ps1` workflow. |
+| `RunLocal.cmd` / `node actions/RunLocal.mjs` | Opens `StartServer.cmd` (static preview of the working tree). No local API. |
+| `DeployLocal.cmd` / `node actions/DeployLocal.mjs` | Clean tree → package `Export/Local` as `0.0.C` → serve that folder (`PORT` or 8092). |
+| `DeployProd.cmd` / `node actions/DeployProd.mjs` | Humans only: claim `N`, package `Export/VersionN` as `0.N.C`, update Lambda, verify `/health.version`. |
 
-Build reuses `api/scripts/pack.mjs`; its archive step currently requires Windows
-PowerShell on Windows or the `zip` executable elsewhere. npm needs access to the
-package registry (or cached dependencies). Build replaces `api/dist` and
-`api/function.zip`; it does not claim a release number or call AWS.
-
-There is no local API runner, isolated dev stack, or AWS emulator configured for
-this service. **Deploy Local means local packaging only**: it starts no server
-and deploys no cloud resources. The Lambda expects API Gateway events and AWS
-S3/DynamoDB services, so this bundle alone is not a runnable local API.
-
-The production action is a migration bridge to the existing PowerShell script,
-preserving Lambda + API Gateway provisioning, production allowlists, and secret
-handling. It requires Windows PowerShell (or `pwsh` elsewhere) and AWS CLI.
-Agents may run Build and Deploy Local; they must never run Deploy Prod, including
-the legacy production entry points or their `-DryRun` mode.
+There is no separate Build action and no local API runner. Packaging uses
+`packageBuild` in `actions/lib/build.mjs` (via `api/scripts/pack.mjs`). Agents may
+run Deploy Local with their assigned `PORT`; they must never run Deploy Prod.
 
 ## Production deploy
 
 From this repo root. Uses your normal **AWS CLI** credentials (`aws sts get-caller-identity`).
+Requires a clean tree and HEAD on the GitHub branch. Details: [`deploy.md`](deploy.md).
 
 Secrets file: `api/.deploy-secrets.env` (gitignored):
 
@@ -86,18 +75,14 @@ TURNSTILE_SECRET=...
 # or: node actions/DeployProd.mjs
 ```
 
-`DeployScreengrabber.ps1` will:
+Deploy Prod will:
 
-1. Pack + deploy Lambda `baffledcat-screenshots`
-2. Ensure S3 bucket + DynamoDB tables + IAM role + HTTP API
-3. Request/wire ACM for `shots.baffledcat.com` and print DNS CNAMEs
-4. Smoke-test `/health`
+1. Claim the next release number `N` on GitHub and package `Export/VersionN` stamped `0.N.C`
+2. Update Lambda `baffledcat-screenshots` code and environment (allowlists from `api/config.production.json`)
+3. Verify `GET https://shots.baffledcat.com/health` returns that version
 
-Flags are forwarded unchanged: `-SkipSecrets`, `-SkipDomain`,
-`-CloudflareTeardown` (opt-in; off by default), `-DryRun`.
-`DeployScreengrabber.cmd` remains a compatibility alias for Deploy Prod;
-`DeployScreengrabber.ps1` remains the production implementation. Even `-DryRun`
-uses AWS credentials and reads deployment secrets; use Build for packaging only.
+For first-time infra (bucket, tables, IAM, HTTP API, ACM domain), a human runs
+`.\scripts\ensure-aws.ps1` once. Day-to-day releases use Deploy Prod only.
 
 ### DNS for `shots.baffledcat.com`
 
