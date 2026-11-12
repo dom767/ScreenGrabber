@@ -65,6 +65,11 @@ use **Deploy Prod** only.
 Secrets: `api/.deploy-secrets.env` (gitignored). Allowlists:
 `api/config.production.json` → Lambda `ALLOWED_ORIGINS` / `ALLOWED_APP_IDS`.
 
+Deploy Prod checks AWS authentication before claiming a release or packaging.
+On Windows it runs the native AWS CLI v2 `aws.exe`, which must be on `PATH`.
+A CLI launch failure is reported separately from a failed identity check; a failed
+identity check triggers interactive `aws login` before continuing.
+
 ## Smoke-test checklist
 
 After Deploy Local (`http://127.0.0.1:8092/` or `PORT`):

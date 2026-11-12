@@ -55,7 +55,8 @@ function run(command, args, o = {}) {
 
 /** @returns {string} */
 function awsBin() {
-  return process.platform === "win32" ? "aws.cmd" : "aws";
+  // Batch shims cannot be spawned directly; AWS CLI v2 installs a native executable.
+  return process.platform === "win32" ? "aws.exe" : "aws";
 }
 
 /** @returns {boolean} */
@@ -66,12 +67,15 @@ function awsIdentityOk() {
     env: process.env,
     windowsHide: true,
   });
+  if (r.error) {
+    throw new Error(`Could not launch ${awsBin()}: ${r.error.message}. Install AWS CLI v2 and ensure it is on PATH.`);
+  }
   return r.status === 0;
 }
 
 function ensureAwsAuth() {
   if (awsIdentityOk()) return;
-  console.log("AWS credentials not found. Running aws login…");
+  console.log("AWS identity check failed. Running aws login…");
   run(awsBin(), ["login"]);
   if (!awsIdentityOk()) {
     console.error("AWS authentication still failed after aws login.");
@@ -226,6 +230,7 @@ try {
   const source = sourceOf(root);
   requireClean(source);
   assertHeadOnUpstream(root);
+  ensureAwsAuth();
   const c = commitCount(root);
   const n = claimVersion(root, { floor: highestRelease() });
   const version = formatVersion(n, c);
@@ -239,7 +244,6 @@ try {
   const zipPath = path.join(dir, "function.zip");
   if (!fs.existsSync(zipPath)) throw new Error(`Missing packaged zip: ${zipPath}`);
 
-  ensureAwsAuth();
   const fileMap = readSecrets();
   const publicBase = secret("PUBLIC_BASE_URL", fileMap) || PUBLIC_BASE;
   const envFile = writeLambdaEnvFile(publicBase, fileMap);
