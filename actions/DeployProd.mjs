@@ -187,14 +187,8 @@ function writeLambdaEnvFile(publicBase, fileMap) {
   const turnstile = secret("TURNSTILE_SECRET", fileMap);
   if (turnstile) vars.TURNSTILE_SECRET = turnstile;
 
-  let devBypass = process.env.DEV_BYPASS_TURNSTILE;
-  if (devBypass == null && Object.prototype.hasOwnProperty.call(fileMap, "DEV_BYPASS_TURNSTILE")) {
-    devBypass = fileMap.DEV_BYPASS_TURNSTILE;
-  }
-  if (devBypass != null) vars.DEV_BYPASS_TURNSTILE = String(devBypass);
-  else if (vars.DEV_BYPASS_TURNSTILE == null) {
-    vars.DEV_BYPASS_TURNSTILE = vars.TURNSTILE_SECRET ? "" : "1";
-  }
+  // Production always verifies Turnstile, including when merging an older environment.
+  vars.DEV_BYPASS_TURNSTILE = "0";
 
   const ticket = secret("TICKET_HMAC_SECRET", fileMap);
   const admin = secret("ADMIN_TOKEN", fileMap);

@@ -79,3 +79,10 @@ After a human runs Deploy Prod:
 - [ ] Admin page contains `self.__SCREENGRABBER_ASSET_VERSION__ = "0.N.C"`
 - [ ] `Export/VersionN/build.json` names the intended source commit
 - [ ] Allowlist changes in `config.production.json` are live (upload from a registered app)
+
+For 3DGalaxy, follow the [activation and stored-upload checklist](README.md#3dgalaxy-registration).
+DeployProd forces `DEV_BYPASS_TURNSTILE=0`. A human must verify that the configured
+secret belongs to widget site key `0x4AAAAAAFWa6VDrVl29LSiw` and allow hostnames
+`baffledcat.com`, `localhost` and `127.0.0.1` in Cloudflare before live testing.
+A 200 upload response is insufficient: confirm the exact `3dgalaxy` shot ID in
+admin and retrieve both stored image assets.

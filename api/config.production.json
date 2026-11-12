@@ -7,11 +7,16 @@
     "http://localhost:7100",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8080",
-    "http://127.0.0.1:7100"
+    "http://127.0.0.1:7100",
+    "http://localhost:8092",
+    "http://127.0.0.1:8092",
+    "http://localhost:7101",
+    "http://127.0.0.1:7101"
   ],
   "allowedAppIds": [
     "mandelbrot",
     "bifurcation",
-    "fluidsimulator"
+    "fluidsimulator",
+    "3dgalaxy"
   ]
 }

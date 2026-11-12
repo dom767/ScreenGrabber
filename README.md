@@ -96,7 +96,7 @@ Use DNS-only (grey cloud) if the zone is on Cloudflare DNS.
 1. Create a Turnstile widget (invisible) for `baffledcat.com` (and `localhost` if needed).
 2. Put the **secret** in `TURNSTILE_SECRET`.
 3. Put the **site key** in each consumer app’s `shotsConfig` and set `devBypassTurnstile: false`.
-4. Set `DEV_BYPASS_TURNSTILE=0` (or empty), then redeploy.
+4. Keep `DEV_BYPASS_TURNSTILE=0`; DeployProd explicitly sets this value, then redeploy.
 
 The API submits each client token together with `TURNSTILE_SECRET` to
 Cloudflare's verification endpoint. The secret must belong to the Turnstile
@@ -130,6 +130,61 @@ To activate this registration, a human must run the production deploy from this
 repository (`.\DeployProd.cmd`), which applies the allowlists to Lambda.
 Keep production `DEV_BYPASS_TURNSTILE=0`. Registration changes alone do not update
 the deployed API; no deployment or widget changes were performed for this registration.
+
+### 3DGalaxy registration
+
+3DGalaxy is registered as `3dgalaxy`. Its `js/shotsConfig.js` uses
+`https://shots.baffledcat.com`; the production page is
+`https://baffledcat.com/galaxy/` (origin `https://baffledcat.com`). Both
+`http://localhost` and `http://127.0.0.1` are allowed on normal local port
+8092 and preview ports 7100 and 7101. Existing consumers remain registered.
+
+The app vendors the SDK and refreshes it during packaging. **Look > Take
+Screenshot** downloads an adjusted JPEG and optionally uploads (checked by
+default). Images fit 1920x1080 and 2 MiB, with a 256x256 JPEG thumbnail.
+Consumer-side browser checks covered local download, nonblank preview,
+brightness adjustment and simulated upload failure; live uploading remains
+unverified. Repository tests exercise tickets for all seven origins with
+Turnstile verification mocked and assert image, thumbnail and metadata writes.
+These checks do not verify the live widget or production storage.
+
+Its public site key is `0x4AAAAAAFWa6VDrVl29LSiw`, with
+`devBypassTurnstile: false`. This is the same public key documented above for
+FluidSimulator, so the documented consumers expect a shared widget. The API
+has no public site-key setting: it verifies tokens using `TURNSTILE_SECRET`.
+Nonsecret configuration cannot confirm that the deployed secret belongs to
+this key. No secrets were inspected or changed.
+
+Human activation and verification checklist:
+
+- [ ] In Cloudflare Turnstile, locate the widget with site key
+  `0x4AAAAAAFWa6VDrVl29LSiw`. Privately verify that the API's configured
+  `TURNSTILE_SECRET` belongs to that widget; do not paste secret values into
+  tasks, logs or committed files. If it differs, a human must put this widget's
+  secret in the gitignored `api/.deploy-secrets.env` used for deployment and
+  remove or update any stale deployment-shell override. Coordinate other
+  consumers before replacing a shared widget or secret.
+- [ ] In that widget's hostname settings, permit `baffledcat.com`, `localhost`
+  and `127.0.0.1`, without schemes, paths or ports. Save any required changes.
+- [ ] After these repository changes land, run ScreenGrabber **DeployProd**
+  from the human dashboard (or `DeployProd.cmd`). This is required to apply
+  the app/origin allowlists and any secret update to Lambda. DeployProd now
+  forces `DEV_BYPASS_TURNSTILE=0`, including when merging an older environment.
+  Confirm the deployed `/health` version matches the intended release.
+- [ ] From `https://baffledcat.com/galaxy/` (or one of the six allowed local
+  origins), use **Look > Take Screenshot**, leave upload checked, complete
+  Turnstile and capture a uniquely identifiable image. Record origin, time,
+  returned shot ID, image URL and thumbnail URL, without recording tokens.
+- [ ] Prove persistence: find that exact ID with `appId=3dgalaxy` in the
+  authenticated ScreenGrabber admin UI and load both returned asset URLs,
+  checking their actual image content. If metadata or either asset is absent,
+  the upload is not verified even if both POSTs returned 200. A human can
+  inspect private failed-attempt logs/CloudWatch to diagnose rejection.
+  Record the result and release version in the follow-up task. Do not publish
+  private logs or credentials.
+
+Production deployment, Cloudflare hostname/secret verification and the real
+stored-upload check are pending human steps; none were performed here.
 
 ### Validation & failed-attempt logging
 
